@@ -8,7 +8,7 @@
 #include <string>
 #define BUTTON D0
 
-#define BRIGHTNESS_LEVEL 25 // 0 - 255
+#define BRIGHTNESS_LEVEL 50 // 0 - 255
 #define COLOR_TRANSITION_DELAY 25 // Total delay in ms
 
 #define PIXEL_PIN D2
@@ -19,25 +19,22 @@ uint32_t Wheel(uint8_t position);
 void fill(Adafruit_NeoPixel* strip, uint32_t color);
 
 #define NUM_COLORS 6
-enum colorName {
-  teal,
-  ocean,
-  purple,
-  warm_red,
-  pale_green,
-  warm_yellow
-};
-
+int currColor = 0;
 unsigned long colorPalette[NUM_COLORS] = {
+  // strip.Color(255, 0, 0),    // red
+  // strip.Color(0, 255, 0),    // green
+  // strip.Color(0, 0, 255),    // blue
+  // strip.Color(255, 255, 0),  // yellow
+  // strip.Color(80, 0, 80),    // purple
+  // strip.Color(0, 255, 255)  // aqua
   strip.Color(26, 188, 156),
-  strip.Color(41, 128, 185),
   strip.Color(155, 89, 182),
   strip.Color(192, 57, 43),
   strip.Color(218, 247, 166),
+  strip.Color(41, 128, 185),
   strip.Color(255, 195, 0),
 };
 
-colorName currColor = teal;
 String touchEventName = "touch_event";
 // bool pressing = false;
 // unsigned int lastPress, lastRelease, previousLastPress, previousLastRelease;
@@ -69,16 +66,8 @@ String touchEventName = "touch_event";
 // }
 
 void setup() {
-  uint32_t testColor = strip.Color(10, 11, 12, 13);
-  char str[50];
-  sprintf(str, "%ld", strip.Color(10, 11, 12, 13));
-  uint8_t b = testColor;
-  uint8_t g = testColor >> 8;
-  uint8_t r = testColor >> 16;
-  sprintf(str, "r: %d, g: %d, b: %d", r, g, b);
-  Particle.publish("test", str);
-  bool success = Particle.function("next-color", nextColor);
-  bool success1 = Particle.function("set-brightness", mySetBrightness);
+  Particle.function("next-color", nextColor);
+  Particle.function("set-brightness", mySetBrightness);
   // set up passive pull-up,
   // when button is pressed BUTTON_PIN will read LOW since it's connected to ground
   pinMode(BUTTON, INPUT_PULLUP);
@@ -89,7 +78,8 @@ void setup() {
   strip.begin();
   strip.setBrightness(BRIGHTNESS_LEVEL);
   strip.show();
-  nextColor("");
+  fill(&strip, colorPalette[currColor]);
+  strip.show();
 }
 
 // // Variables will change:
@@ -114,9 +104,9 @@ void loop() {
 }
 
 int nextColor(String extra) {
-  currColor = (colorName)((currColor + 1) % NUM_COLORS);
-  fill(&strip, colorPalette[currColor]);
-  strip.show();
+  int nextColor = ((currColor + 1) % NUM_COLORS);
+  transition(&strip, colorPalette[currColor], colorPalette[nextColor]);
+  currColor = nextColor;
   return 0;
 }
 
@@ -128,12 +118,42 @@ int mySetBrightness(String text) {
   strip.show();
   return brightness;
 }
-// Smoothly transition between two colors (0-255) by going through the color wheel
-void transition(Adafruit_NeoPixel* strip, uint8_t startingColor, uint8_t endingColor) {
-  for(uint8_t currColor = startingColor+1; currColor <= endingColor; currColor = (currColor+1)%256) {
-    fill(strip, Wheel(currColor));
-    delay(COLOR_TRANSITION_DELAY);
+
+// Smoothly transition between two colors by calculating
+// the 3D vector between their RGB values and traversing it
+void transition(Adafruit_NeoPixel* strip, uint32_t startingColor, uint32_t endingColor) {
+  // Starting RGB values
+  uint8_t sr = startingColor >> 16;
+  uint8_t sg = startingColor >> 8;
+  uint8_t sb = startingColor;
+  // Ending RGB values
+  uint8_t er = endingColor >> 16;
+  uint8_t eg = endingColor >> 8;
+  uint8_t eb = endingColor;
+
+  while(sr != er || sg != eg || sb != eb) {
+    if ( sr < er ) sr += 1;
+    if ( sr > er ) sr -= 1;
+    if ( sg < eg ) sg += 1;
+    if ( sg > eg ) sg -= 1;
+    if ( sb < eb ) sb += 1;
+    if ( sb > eb ) sb -= 1;
+    fill(strip, strip->Color(sr, sg, sb));
+    strip->show();
   }
+
+  // Delta RGB values ("slope")
+  // int steps = 50;
+  // double dr = (sr-er)/steps;
+  // double dg = (sg-eg)/steps;
+  // double db = (sb-eb)/steps;
+  // uint32_t currColor = startingColor;
+  // for(int i = 0; i < steps; i++) {
+  //   fill(strip, currColor);
+  //   strip->show();
+  //   currColor = strip->Color((uint8_t)(sr+=dr), (uint8_t)(sg+=dg), (uint8_t)(sb+=db));
+  //   delay(10);
+  // }
 }
 
 // Set all pixels to color
